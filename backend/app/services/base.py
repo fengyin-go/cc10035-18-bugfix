@@ -14,6 +14,9 @@ class BaseModuleService:
     STATUS_ORDER: list[str] = []
     ACTION_RULES: dict[str, str] = {}
     NEGATIVE_ACTIONS: list[str] = []
+    # 只读交付物（由上游链路生成）不提供手工登记和状态流转。
+    READ_ONLY = False
+    READ_ONLY_REASON = ""
 
     def list_entries(
         self,
@@ -44,6 +47,8 @@ class BaseModuleService:
         return store.find(self.MODULE, entry_id)
 
     def create_entry(self, values: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+        if self.READ_ONLY:
+            return None, [self.READ_ONLY_REASON or f"{self.ENTITY}为只读交付物，不支持手工登记"]
         missing = [
             field for field in self.REQUIRED_FIELDS
             if not str(values.get(field) or "").strip()
@@ -60,6 +65,8 @@ class BaseModuleService:
         return entry, []
 
     def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
+        if self.READ_ONLY:
+            return None, self.READ_ONLY_REASON or f"{self.ENTITY}为只读交付物，不执行状态流转"
         entry = store.find(self.MODULE, entry_id)
         if entry is None:
             return None, f"{self.ENTITY} {entry_id} 不存在或已归档"

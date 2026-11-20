@@ -55,7 +55,9 @@ npm run dev
 | 关系图谱 | `relation_graph` | 关系边 | 边ID、源实体、目标实体 |
 | 内容分类 | `content_classifier` | 分类标签 | 标签ID、页面URI、一级分类 |
 | 模板规则 | `template_rule` | 规则模板 | 模板名称、适用站点、提取字段 |
-| 文本分块 | `text_segment` | 文本块 | 块ID、来源页面、块类型 |
+| 文本分块 | `text_segment` | 文本块 | 块ID、来源页面、采集版本 |
+| 文本来源校验数据集 | `text_source_dataset` | 文本块 | 块ID、采集版本、校验结论 |
+| 待补采清单 | `backfill_list` | 缺测页 | URL、最近采集状态、上次可用版本 |
 | 情感标注 | `sentiment_tag` | 情感记录 | 记录ID、文本片段、情感倾向 |
 | Schema对齐 | `schema_align` | 对齐规则 | 规则名称、源Schema、目标Schema |
 | 种子调度 | `feed_scheduler` | 调度任务 | 任务名称、URL种子、抓取深度 |
@@ -68,6 +70,40 @@ npm run dev
 | 输出目标 | `output_target` | 输出配置 | 配置名称、输出类型、目标地址 |
 | 抽取工坊 | `extract_studio` | 交互任务 | 任务名称、示例页面、标注区域 |
 | 聚合视图 | `aggregate_view` | 视图配置 | 视图名称、统计维度、聚合字段 |
+
+## 采集链路
+
+文本分块不再按固定模板生成示例块：只把**实际采集到的 HTML** 解析成文档顺序上的
+正文片段，没有正文就返回 0 个块。整条链路围绕三个事实展开：
+
+- **采集版本**：同一 URL 每次抓取都是一个版本（`version` 从 1 递增），状态分为
+  `有效文本` / `空正文` / `无法获取`。只有有效文本会产生块；空正文和无法获取都会
+  进入待补采清单，补采成功后自动解除。
+- **文本来源校验数据集**：每个块都能回溯到「采集ID + 采集版本 + 片段序号 + 文本哈希」，
+  并带 `已校验 / 历史引用 / 校验失败` 结论。历史示例块仍可解析出处，但不计入有效样本。
+- **情感标注**：只消费上述数据集里校验通过的块。分析记录写回待补采清单，带有实际使用的
+  采集版本和时效状态；分块清单、数据集、情感统计使用同一个有效样本口径。
+
+关键接口：
+
+| 用途 | 接口 |
+| --- | --- |
+| 登记一次采集并切分 | `POST /api/capture/pages`、`POST /api/text_segment/segment` |
+| 采集中断后重试 | `POST /api/capture/retry` |
+| 文本来源校验数据集（可导出） | `GET /api/capture/text-source`、`GET /api/text_segment/dataset` |
+| 按页面核对来源与时效 | `GET /api/text_segment/source-check?url=…` |
+| 待补采清单 | `GET /api/capture/backfill`、`GET /api/feed_scheduler/backfill` |
+| 情感分析（按块/按页） | `POST /api/capture/sentiment/analyze`、`POST /api/sentiment_tag/analyze` |
+| 有效样本对账 | `GET /api/capture/consistency`、`GET /api/sentiment_tag/consistency` |
+| 交付报告 | `GET /api/capture/report` |
+
+报告会明确交代每个页面采用了哪个采集版本（`capture_version_used` /
+`version_source`）、各条分析记录分别用了哪个版本（`analysis_versions_used`），
+以及当前空页是否进入有效情感分布（`empty_pages[].included_in_valid_distribution`）。
+同一页面最新采集为空、上一次仍有可用文本时，分析沿用最近可用版本并标记
+`freshness_conflict`，不会把缺失当成结论。
+
+回归测试：`cd backend && .venv/bin/python -m unittest discover -s tests -v`
 
 ## 约定
 

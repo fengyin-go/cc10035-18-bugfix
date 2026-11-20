@@ -35,7 +35,7 @@ class AggregateViewService(BaseModuleService):
         }
 
     def aggregate_sentiment_trend(self) -> dict[str, Any]:
-        """消费情感标注的分布数据。"""
+        """消费情感标注的分布数据；与有效样本口径保持一致。"""
         from app.services.sentiment_tag import SentimentTagService
         sts = SentimentTagService()
         summary = sts.compute_sentiment_summary()
@@ -44,7 +44,10 @@ class AggregateViewService(BaseModuleService):
             "chart_type": "bar",
             "data_source": "sentiment_tag",
             "sentiment_distribution": summary["sentiment_distribution"],
-            "total_records": summary["total_records"],
+            "total_records": summary["valid_analyzed_records"],
+            "effective_sample_count": summary["effective_sample_count"],
+            "unanalyzed_blocks": len(summary["unanalyzed_valid_blocks"]),
+            "excluded_records": summary["excluded_records"],
         }
 
     def aggregate_quality_metrics(self) -> dict[str, Any]:

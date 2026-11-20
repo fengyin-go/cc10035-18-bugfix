@@ -28,6 +28,21 @@
       </span>
     </p>
 
+    <section v-if="captureAction" class="analysis-form" data-testid="capture-panel">
+      <label>
+        <span>页面 URL</span>
+        <input v-model="captureUrl" data-testid="capture-page-url" placeholder="https://…" />
+      </label>
+      <label v-if="captureAction === 'segment'">
+        <span>采集到的 HTML</span>
+        <input v-model="captureHtml" data-testid="capture-page-html" placeholder="留空表示本次采集没有正文" />
+      </label>
+      <button class="btn primary" data-testid="capture-run" type="button" :disabled="!captureUrl.trim()" @click="runCapture">
+        {{ captureAction === 'segment' ? '按采集片段切分' : '分析该页有效文本' }}
+      </button>
+      <span v-if="captureMessage" data-testid="capture-message">{{ captureMessage }}</span>
+    </section>
+
     <form class="filter-bar" @submit.prevent="reload">
       <label v-for="field in filterFields" :key="field" class="filter-item">
         <span>{{ field }}</span>
@@ -103,6 +118,7 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/backend-service'
+import { request } from '@/api/client'
 import type { EntryRow } from '@/data/types'
 
 const props = defineProps<{ moduleKey: string }>()
@@ -115,6 +131,14 @@ const filterFields = meta.fields.slice(0, 3)
 const showCreate = ref(false)
 const creating = ref(false)
 const createValues = ref<Record<string, string>>({})
+const captureUrl = ref('')
+const captureHtml = ref('')
+const captureMessage = ref('')
+const captureAction = computed(() => {
+  if (props.moduleKey === 'text_segment') return 'segment'
+  if (props.moduleKey === 'sentiment_tag') return 'analyze'
+  return ''
+})
 const stats = computed(() => [
   { label: meta.metrics[0], value: total.value },
   { label: meta.metrics[1], value: rows.value.filter((row) => row.status === meta.statuses[1]).length },
@@ -173,6 +197,39 @@ async function runAction(action: string, row: EntryRow) {
     await reload()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '操作失败'
+  }
+}
+
+async function runCapture() {
+  captureMessage.value = ''
+  errorMessage.value = ''
+  try {
+    const url = captureUrl.value.trim()
+    const path = captureAction.value === 'segment'
+      ? '/api/text_segment/segment'
+      : '/api/sentiment_tag/analyze'
+    const body = captureAction.value === 'segment'
+      ? { url, raw_html: captureHtml.value }
+      : { url }
+    const response = await request(path, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    if (!response.ok) throw new Error('采集链路请求失败')
+    const payload = await response.json()
+    if (captureAction.value === 'segment') {
+      captureMessage.value = payload.block_count
+        ? `采集版本${payload.capture_version}切分出${payload.block_count}个块`
+        : `采集版本${payload.capture_version}：${payload.reason}`
+    } else {
+      captureMessage.value = payload.total_analyzed
+        ? `使用采集版本${payload.capture_version_used}分析${payload.total_analyzed}块`
+          + (payload.empty_page_excluded ? '；最新采集为空，已标记时效冲突' : '')
+        : `没有可用正文，未形成情感结论（${payload.freshness_note ?? '缺测页'}）`
+    }
+    await reload()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '采集链路操作失败'
   }
 }
 

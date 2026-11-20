@@ -8,6 +8,8 @@ from app.services.relation_graph import RelationGraphService
 from app.services.content_classifier import ContentClassifierService
 from app.services.template_rule import TemplateRuleService
 from app.services.text_segment import TextSegmentService
+from app.services.text_source_dataset import TextSourceDatasetService
+from app.services.backfill_list import BackfillListService
 from app.services.sentiment_tag import SentimentTagService
 from app.services.schema_align import SchemaAlignService
 from app.services.feed_scheduler import FeedSchedulerService
@@ -28,6 +30,8 @@ SERVICES: dict[str, BaseModuleService] = {
     "content_classifier": ContentClassifierService(),
     "template_rule": TemplateRuleService(),
     "text_segment": TextSegmentService(),
+    "text_source_dataset": TextSourceDatasetService(),
+    "backfill_list": BackfillListService(),
     "sentiment_tag": SentimentTagService(),
     "schema_align": SchemaAlignService(),
     "feed_scheduler": FeedSchedulerService(),

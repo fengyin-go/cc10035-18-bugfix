@@ -1,7 +1,6 @@
 """种子调度领域服务：管理URL种子的批量爬取调度。"""
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from app.services.base import BaseModuleService
@@ -34,7 +33,11 @@ class FeedSchedulerService(BaseModuleService):
         }
 
     def feed_text_segmentation(self, task_id: int) -> dict[str, Any]:
-        """调度url种子，输出给文本分块模块消费。"""
+        """调度 url 种子，把待抓页面交给文本分块模块。
+
+        这里只推导出要抓哪些页面，不再预生成块类型和字符数：
+        真实块必须等实际采集回来、按采集片段切分之后才有。
+        """
         task = store.find(self.MODULE, task_id)
         if task is None:
             return {"ok": False, "reason": "调度任务不存在"}
@@ -47,21 +50,14 @@ class FeedSchedulerService(BaseModuleService):
 
         url_result = self.extract_urls_from_seed(seed, min(depth, 3))
         pages = url_result["urls"]
-        page_blocks = []
-        for i, url in enumerate(pages):
-            block_id = hashlib.md5(f"{url}|block".encode()).hexdigest()[:8]
-            page_blocks.append({
-                "url": url,
-                "block_id": block_id,
-                "block_types": ["paragraph", "heading", "list"],
-                "estimated_chars": 2500 + (i * 500),
-            })
         return {
             "ok": True,
             "task_id": task_id,
             "seed_url": seed,
             "total_pages": len(pages),
-            "page_blocks": page_blocks,
+            "urls": pages,
+            "pending_capture": True,
+            "note": "块只有在实际采集并按片段切分后才会产生",
         }
 
     def compute_scheduler_stats(self) -> dict[str, Any]:
